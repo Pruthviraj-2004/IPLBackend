@@ -1,0 +1,52 @@
+{% extends 'ipl2/base.html' %}
+
+{% block content %}
+    <div class="container">
+        {% if form.errors %}
+            <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                There was an error with your form ...
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endif %}
+
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <h1 class="mb-4">Register</h1>
+
+                <form action="{% url 'register_user' %}" method="POST">
+                    {% csrf_token %}
+
+                    {{ form.name.label_tag }}
+                    {{ form.name }}
+                    <br>
+
+                    {{ form.username.label_tag }}
+                    {{ form.username }}
+                    <ul>
+                    <li>Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only</li>
+                    </ul>
+                    <br>
+
+                    {{ form.email.label_tag }}
+                    {{ form.email }}
+                    <br>
+
+                    {{ form.password1.label_tag }}
+                    {{ form.password1 }}
+                    <br>
+                    <ul>
+                    <li>Your password cannot be too similar to your other personal information.</li>
+                    <li>Your password must contain at least 8 characters.</li>
+                    <li>Your password cannot be a commonly used password.</li>
+                    <li>Your password cannot be entirely numeric.</li>
+                    </ul>
+                    {{ form.password2.label_tag }}
+                    {{ form.password2 }}
+                    <br><br>
+
+                    <input type="submit" value="Submit" class="btn btn-secondary">
+                </form>
+            </div>
+        </div>
+    </div>
+{% endblock %}

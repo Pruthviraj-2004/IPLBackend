@@ -1,0 +1,66 @@
+{% extends 'ipl2/base.html'%}
+
+{% block content %}
+<body>
+    <div class="container-fluid homepage-container">
+        <div class="overlay"></div>
+        <div class="content">
+            
+            <h1>Welcome to Predictiveplay</h1>
+            
+            <p>
+                Predict the outcomes of the matches and earn points to climb the leaderboard. Compete with other players and showcase your predictive skills!
+            </p>
+            
+            <h2>How it Works</h2>
+            <ol>
+                <li>Browse the upcoming matches and make your predictions.</li>
+                <li>Earn points based on the accuracy of your predictions.</li>
+                <li>Check the leaderboard to see your ranking among other players.</li>
+                <li>Enjoy the thrill of predicting and winning!</li>
+            </ol>
+            
+            <h2>Leaderboard</h2>
+            <p>
+                Keep an eye on the leaderboard to see how you stack up against other players. The more accurate your predictions, the higher you'll climb!
+            </p>
+            
+            <h2>Get Started</h2>
+            <p>
+                Register to start predicting matches and earning points. The more you play, the more chances you have to win exciting rewards!
+            </p>
+
+            <h2>Benefits</h2>
+            <p>
+                Exciting rewards await the top 5 predictors of the overall tournament. Rewards will be announced soon. Terms and conditions apply.
+            </p>
+
+            <h2>Guidelines</h2>
+            <ol>
+                <li>Ensure you provide a valid email address.</li>
+                <li>Memorize your username and password.</li>
+                <li>Choose a robust password during registration.</li>
+            </ol>
+
+            <h2>Number of Players Participating</h2>
+            <p>{{ num_users }} players are currently participating in the tournament.</p>
+            
+        </div>
+    </div>
+
+    {% comment %} <footer class="bg-dark text-white text-center py-3">
+        <div class="container">
+            <p class="mb-0">{{ num_users }} players are currently participating in the tournament.</p>
+            <p class="mb-0">Contact us at abc@gmail.com</p>
+            <p class="mb-0">Predictive Play</p>
+        </div>
+    </footer> {% endcomment %}
+
+    <!-- Bootstrap JS and dependencies (optional, only required if you use Bootstrap JS features) -->
+    <!-- You can include these at the end of the body for better performance -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+
+{% endblock %}

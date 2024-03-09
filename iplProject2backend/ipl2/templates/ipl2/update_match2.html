@@ -1,0 +1,19 @@
+{% extends 'ipl2/base.html'%}
+
+{% block content %}
+  {% if user.is_authenticated %}
+    {% if request.user.is_superuser %}
+      <h1>Update Match..</h1><br />
+      <form method="POST" action="">
+        {% csrf_token %}
+
+        {{ form.as_p }}
+
+        <br />
+        <input type="submit" value="Update" class="btn btn-secondary" />
+      </form>
+    {% else %}
+      <h1>Sorry! You must be Logged in to view this Page</h1>
+    {% endif %}
+  {% endif %}
+{% endblock %}
