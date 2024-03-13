@@ -1,6 +1,4 @@
 from django.db import models
-from django.db.models.signals import post_save
-from django.dispatch import receiver
 from django.contrib.auth.models import User
 
 class TeamInfo(models.Model):
@@ -21,7 +19,6 @@ class UserInfo(models.Model):
     score1 = models.IntegerField(default=0, null=True)
     score2 = models.IntegerField(default=0, null=True)
 
-
     def __str__(self):
         return self.username
 
@@ -31,7 +28,6 @@ class PlayerInfo(models.Model):
     playerTeamNo = models.ForeignKey(TeamInfo, on_delete=models.CASCADE, null=True, related_name='player_teams')
     playerRole = models.SmallIntegerField(null=True)
     playing11status = models.SmallIntegerField(default=1)
-
 
     def __str__(self):
         return self.playerName
@@ -45,7 +41,7 @@ class MatchInfo(models.Model):
     winner_team = models.ForeignKey(TeamInfo, on_delete=models.CASCADE, related_name='winning_matches', blank=True, null=True)
 
     status = models.SmallIntegerField(default=0)
-   
+
     playerofmatch = models.ForeignKey(PlayerInfo, on_delete=models.CASCADE, related_name='player_of_match', blank=True, null=True)
     mostrunsplayer = models.ForeignKey(PlayerInfo, on_delete=models.CASCADE, related_name='most_runs_player', blank=True, null=True)
     mostwickettaker = models.ForeignKey(PlayerInfo, on_delete=models.CASCADE, related_name='most_wickets_taker', blank=True, null=True)
@@ -72,22 +68,17 @@ class SubmissionsInfo5(models.Model):
 
 class LbRegistrationTable(models.Model):
     lid = models.AutoField(primary_key=True)
-    uid = models.ForeignKey(UserInfo, on_delete=models.CASCADE)  # Link to the user who registered the leaderboard
+    uid = models.ForeignKey(UserInfo, on_delete=models.CASCADE)
     leaderboardname = models.CharField(max_length=30)
     password = models.CharField(max_length=16)
-
-# Set the table name to lbregistration
 
     def __str__(self):
         return self.leaderboardname
     
 class LbParticipationTable(models.Model):
-    lid = models.ForeignKey(LbRegistrationTable, on_delete=models.CASCADE)  # Link to the registered leaderboard
+    lid = models.ForeignKey(LbRegistrationTable, on_delete=models.CASCADE)
     lpid = models.AutoField(primary_key=True)
     username = models.ForeignKey(UserInfo, on_delete=models.CASCADE, related_name='participations')
     
-    
     def __str__(self):
         return f"{self.lid} - {self.username}"
-
-

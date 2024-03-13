@@ -1,0 +1,25 @@
+{% extends 'ipl2/base.html'%}
+
+{% block content %}
+<button type="button" class="btn btn-link" onclick="window.location.href='{% url 'password_reset' %}'">Forgot Password</button>
+{% if user.is_authenticated %}
+    <h1> Add Leaderboard To Database </h1>
+    <br>
+    <br>
+    {% if submitted %}
+        Leaderboard Succesfully created!!!
+    {% else %}
+    
+    <form action="" method=POST>
+        {% csrf_token %}
+
+        {{ form.as_p}}
+
+
+        <input type="submit" value="Submit" class="btn btn-secondary">
+    </form>
+    {% endif %}
+{% else %}
+    <h1> Sorry! You must be Logged in to view this Page</h1>
+{% endif %}
+{% endblock %}

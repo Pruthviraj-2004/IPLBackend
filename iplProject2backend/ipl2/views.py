@@ -12,8 +12,33 @@ from .forms import  MatchInfoForm, RegisterUserForm
 from django.core.serializers import serialize
 from .models import SubmissionsInfo5, UserInfo, LbParticipationTable, LbRegistrationTable, MatchInfo, TeamInfo, PlayerInfo
 from rest_framework.views import APIView
-from .serializers import MatchInfoSerializer
+from .serializers import MatchInfoSerializer, TeamInfoSerializer, SubmissionsInfo5Serializer
 from django.db.models import Count
+from django.forms.models import model_to_dict
+from django.utils.decorators import method_decorator
+from django.views import View
+from datetime import datetime
+from django.utils import timezone
+
+from django.contrib.auth import views as auth_views
+from django import forms
+from django.contrib.auth.views import PasswordResetView
+from django.contrib.auth.forms import PasswordResetForm
+from django.http import HttpResponseRedirect
+from django.urls import reverse_lazy
+from django.contrib.auth.models import User
+from .forms import CustomPasswordResetForm 
+from django.contrib.sites.shortcuts import get_current_site  
+from django.utils.encoding import force_bytes
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode  
+from django.template.loader import render_to_string  
+from .tokens import account_activation_token  
+from django.contrib.auth.models import User  
+from django.core.mail import EmailMessage  
+from django.contrib.auth import get_user_model
+from django.http import HttpResponse
+
 
 @api_view(['GET'])
 def home(request):
@@ -23,24 +48,25 @@ def home(request):
     # Serialize the queryset
     serializer = MatchInfoSerializer(matches, many=True)
     
-    total_users = UserInfo.objects.aggregate(total_users=Count('userID'))['total_users']
+    # total_users = UserInfo.objects.aggregate(total_users=Count('userID'))['total_users']
+    total_users = UserInfo.objects.count()
     # Return the serialized data as JSON response
     return Response({'matches': serializer.data, 'total_users': total_users})
     
-@csrf_exempt
-def register_user(request):
-    if request.method == "POST":
+@method_decorator(csrf_exempt, name='dispatch')
+class RegisterUserView(View):
+    def post(self, request):
         try:
             # Parse JSON data from request body
             data = json.loads(request.body)
-            
+            print(data)
             # Create a RegisterUserForm instance with the received data
             form = RegisterUserForm(data)
-
+            print(form)
             if form.is_valid():
                 # Save the form data to create a new user
                 user = form.save()
-
+                print(user)
                 # Access UserInfo related to the user
                 user_info = user.userinfo
 
@@ -51,37 +77,36 @@ def register_user(request):
                 weekly_leaderboard = LbRegistrationTable.objects.get(leaderboardname='Weekly')
                 LbParticipationTable.objects.create(lid=weekly_leaderboard, username=user_info)
 
-                # Return user data as JSON response
-                user_data = {
-                    'id': user.id,
-                    'username': user.username,
-                    'name': user_info.name,
-                    'email': user.email,
-                    # Add any other fields you want to include
-                }
-                return JsonResponse({'user': user_data}, status=201)  # Status 201 indicates resource creation
+                # Return success message and user data as JSON response
+                user_data = model_to_dict(user)
+                print(user_data)
+                return JsonResponse({'success': True, 'message': 'User registered successfully', 'user': user_data}, status=201)  # Status 201 indicates resource creation
             else:
                 # If form is not valid, return validation errors as JSON response
-                return JsonResponse({'errors': form.errors}, status=400)
+                errors = {field: form.errors[field][0] for field in form.errors}
+                print(errors)
+                return JsonResponse( {'error':errors}, status=400)
         except json.JSONDecodeError:
-            return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+            return JsonResponse({'success': False, 'error': 'Invalid JSON data'}, status=400)
         except LbRegistrationTable.DoesNotExist:
-            return JsonResponse({'error': 'Leaderboard does not exist'}, status=404)
-    else:
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
+            return JsonResponse({'success': False, 'error': 'Leaderboard does not exist'}, status=404)
 
-@csrf_exempt
-def login_user(request):
-    if request.method == "POST":
+    def get(self, request):
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405) 
+
+@method_decorator(csrf_exempt, name='dispatch')
+class LoginUserView(View):
+    def post(self, request):
         try:
             # Parse JSON data from request body
             data = json.loads(request.body)
-            
+
             username = data.get('username')
             password = data.get('password1')
 
             # Perform authentication
             user = authenticate(request, username=username, password=password)
+            
             if user is not None:
                 login(request, user)
                 # Serialize user data
@@ -95,7 +120,8 @@ def login_user(request):
                 return JsonResponse({'error': 'Invalid username or password'}, status=400)
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON data'}, status=400)
-    else:
+
+    def get(self, request):
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
 @csrf_exempt
@@ -104,116 +130,16 @@ def logout_user(request):
     messages.success(request, ("Logged Out Successfully!! "))
     return redirect('home')
 
-
-def leaderboard1(request):
-    # Retrieve all leaderboards
-    leaderboards = ['Global', 'Weekly']
-
-    if request.method == 'POST':
-        selected_leaderboard = request.POST.get('selected_leaderboard', 'Global')
-    else:
-        selected_leaderboard = 'Global'
-
-    if selected_leaderboard == 'Global':
-        user_list = UserInfo.objects.order_by('-score1', 'username')
-    elif selected_leaderboard == 'Weekly':
-        user_list = UserInfo.objects.order_by('-score2', 'username')
-    else:
-        user_list = []
-
-    # Serialize the user_list queryset to JSON format
-    serialized_users = serialize('json', user_list)
-
-    # Return the serialized data as a JSON response
-    return JsonResponse({
-        'leaderboards': leaderboards,
-        'selected_leaderboard': selected_leaderboard,
-        'user_list': serialized_users
-    }, safe=False)
-
-def user_submissions(request, username):
-    # Fetch all submissions for the specified user
-    user_submissions = SubmissionsInfo5.objects.filter(username=username).order_by('smatch_id')
-
-    # Fetch related match details for each submission
-    submission_details = []
-
-    for submission in user_submissions:
-        match = MatchInfo.objects.get(matchID=submission.smatch_id)
-        submission_details.append({
-            'smatchID': submission.smatch_id,
-            'predictedteam': submission.predictedteam.teamname,  # Access the team name through ForeignKey relationship
-            'predictedpom': submission.predictedpom.playerName if submission.predictedpom else None,  # Check if predictedpom is not None
-            'playerofmatch': match.playerofmatch.playerName if match.playerofmatch else None,  # Check if playerofmatch is not None
-            'predictedmr': submission.predictedmr.playerName if submission.predictedmr else None,  # Check if predictedmr is not None
-            'mostrunsplayer': match.mostrunsplayer.playerName if match.mostrunsplayer else None,  # Check if mostrunsplayer is not None
-            'predictedmwk': submission.predictedmwk.playerName if submission.predictedmwk else None,  # Check if predictedmwk is not None
-            'mostwickettaker': match.mostwickettaker.playerName if match.mostwickettaker else None,  # Check if mostwickettaker is not None
-            'winner_team': match.winner_team.teamname if match.winner_team else None,  # Check if winner_team is not None
-            'score': submission.score,
-            'match_teamA': match.teamA.teamname,
-            'match_teamB': match.teamB.teamname,
-            'match_location': match.location,
-        })
-
-    # Serialize the data to JSON format
-    serialized_data = {
-        'username': username,
-        'submissions': submission_details,
-    }
-
-    # Return the serialized data as a JSON response
-    return JsonResponse(serialized_data, safe=False)
-
-
-from .serializers import MatchInfoSerializer, SubmissionsInfo5Serializer
-
-@api_view(['GET'])
-def user_submissions2(request, username):
-    # Check if the requested username matches the logged-in user's username
-    if request.user.username == username:
+class UserSubmissions(APIView):
+    def get(self, request, username):
         # Fetch all submissions for the specified user
         user_submissions = SubmissionsInfo5.objects.filter(username=username).order_by('smatch_id')
-    else:
-        # Fetch submissions for the specified username with match status=1
-        user_submissions = SubmissionsInfo5.objects.filter(username=username, smatch__status=1).order_by('smatch_id')
 
-    # Serialize submission data
-    serialized_submissions = SubmissionsInfo5Serializer(user_submissions, many=True).data
+        # Serialize the data to JSON format
+        serialized_data = SubmissionsInfo5Serializer(user_submissions, many=True).data
 
-    # Fetch related match details for each submission
-    submission_details = []
-
-    for submission in user_submissions:
-        match = MatchInfo.objects.get(matchID=submission.smatch_id)
-        submission_details.append({
-            'smatchID': submission.smatch_id,
-            'predictedteam': submission.predictedteam.teamname if submission.predictedteam else None,  # Check if predictedteam is not None
-            'predictedpom': submission.predictedpom.playerName if submission.predictedpom else None,  # Check if predictedpom is not None
-            'playerofmatch': match.playerofmatch.playerName if match.playerofmatch else None,  # Check if playerofmatch is not None
-            'predictedmr': submission.predictedmr.playerName if submission.predictedmr else None,  # Check if predictedmr is not None
-            'mostrunsplayer': match.mostrunsplayer.playerName if match.mostrunsplayer else None,  # Check if mostrunsplayer is not None
-            'predictedmwk': submission.predictedmwk.playerName if submission.predictedmwk else None,  # Check if predictedmwk is not None
-            'mostwickettaker': match.mostwickettaker.playerName if match.mostwickettaker else None,  # Check if mostwickettaker is not None
-            'winner_team': match.winner_team.teamname if match.winner_team else None,  # Check if winner_team is not None
-            'score': submission.score,
-            'match_teamA': match.teamA.teamname,
-            'match_teamB': match.teamB.teamname,
-            'match_location': match.location,
-        })
-
-    # Serialize match details data
-    serialized_match_details = submission_details
-
-    # Combine submission and match details
-    serialized_data = {
-        'username': username,
-        'submissions': serialized_submissions,
-        'match_details': serialized_match_details,
-    }
-
-    # Return the serialized data as a JSON response
-    return JsonResponse(serialized_data, safe=False)
+        # Return the serialized data as a JSON response
+        return JsonResponse({'username': username, 'submissions': serialized_data})
 
 class MatchInfoList(APIView):
     def get(self, request):
@@ -225,71 +151,6 @@ class MatchInfoList(APIView):
 
         # Return the serialized data as JSON response
         return Response({'match_list': serializer.data})
-
-def leaderboard3(request):
-    leaderboards = LbRegistrationTable.objects.all()
-    current_user = request.user
-    user_participating_leaderboards = []
-
-    # Check if the current user is participating in any leaderboard
-    if current_user.is_authenticated:
-        user_participating_leaderboards = LbParticipationTable.objects.filter(username__username=current_user.username).values_list('lid__leaderboardname', flat=True)
-
-    # Filter leaderboards based on user's participation
-    if user_participating_leaderboards:
-        leaderboards = leaderboards.filter(leaderboardname__in=user_participating_leaderboards)
-    else:
-        # Default to displaying only 'Global' and 'Weekly' leaderboards if the user is not participating
-        leaderboards = leaderboards.filter(leaderboardname__in=['Global', 'Weekly'])
-
-    # Get the selected leaderboard ID from the URL parameters
-    selected_leaderboard_id = request.GET.get('selected_leaderboard')
-    # Initialize an empty queryset for user_list
-    user_list = UserInfo.objects.none()
-    # Initialize selected_leaderboard
-    selected_leaderboard = None
-
-    # Filter users based on the selected leaderboard if a leaderboard is selected
-    if selected_leaderboard_id:
-        try:
-            selected_leaderboard_id = int(selected_leaderboard_id)
-            # Retrieve the usernames of users who have participated in the selected leaderboard
-            usernames = LbParticipationTable.objects.filter(lid_id=selected_leaderboard_id).values_list('username__username', flat=True)
-            # Filter user_list based on the usernames obtained
-            user_list = UserInfo.objects.filter(username__in=usernames)
-            # Get the selected leaderboard object
-            selected_leaderboard = LbRegistrationTable.objects.get(pk=selected_leaderboard_id)
-            if selected_leaderboard.leaderboardname == 'Weekly':
-                user_list = user_list.order_by('-score2', 'username')
-            else:
-                user_list = user_list.order_by('-score1', 'username')
-        except (ValueError, LbRegistrationTable.DoesNotExist):
-            pass
-    else:
-        # If no leaderboard is selected or if 'Global' is selected by default, display users for 'Global' leaderboard
-        global_leaderboard = leaderboards.filter(leaderboardname='Global').first()
-        if global_leaderboard:
-            usernames = LbParticipationTable.objects.filter(lid_id=global_leaderboard.pk).values_list('username__username', flat=True)
-            user_list = UserInfo.objects.filter(username__in=usernames).order_by('-score1', 'username')
-            selected_leaderboard = global_leaderboard
-
-    # Assign ranks to users in user_list
-    for rank, user_info in enumerate(user_list, start=1):
-        user_info.rank = rank
-
-    # Serialize the data to JSON format
-    serialized_data = {
-        'leaderboards': list(leaderboards.values()),  # Convert queryset to list of dictionaries
-        'user_list': [{'rank': user_info.rank, 'username': user_info.username, 'score1': user_info.score1, 'score2': user_info.score2} for user_info in user_list],  # Include only necessary fields
-        'selected_leaderboard': {
-            'lid': selected_leaderboard.lid,  # Use the primary key field here
-            'leaderboardname': selected_leaderboard.leaderboardname,
-            # Add more fields as needed
-        } if selected_leaderboard else None
-    }
-
-    # Return the serialized data as a JSON response
-    return JsonResponse(serialized_data, safe=False)
 
 def leaderboard2(request):
     leaderboards = LbRegistrationTable.objects.all()
@@ -343,7 +204,6 @@ def leaderboard2(request):
     # Return the serialized data as a JSON response
     return JsonResponse(serialized_data)
 
-from django.forms.models import model_to_dict
 from django.utils import timezone
 
 @csrf_exempt
@@ -418,9 +278,9 @@ def predict1(request, match_id):
 
             # Merge players from both teams
             all_players_data = [
-                {'name': player.playerName, 'team': 'Team A'} for player in players_A
+                {'name': player.playerName, 'team': team_A.teamshortform} for player in players_A
             ] + [
-                {'name': player.playerName, 'team': 'Team B'} for player in players_B
+                {'name': player.playerName, 'team': team_B.teamshortform} for player in players_B
             ]
 
             # Serialize team_A and team_B
@@ -428,8 +288,8 @@ def predict1(request, match_id):
             team_B_data = model_to_dict(team_B)
 
             # Filter batsmen and bowlers based on enumeration data type
-            batsmen_data = [{'name': player.playerName, 'team': 'Team A'} for player in players_A if player.playerRole in [1, 3, 4]] + [{'name': player.playerName, 'team': 'Team B'} for player in players_B if player.playerRole in [1, 3, 4]]
-            bowlers_data = [{'name': player.playerName, 'team': 'Team A'} for player in players_A if player.playerRole in [2, 3]] + [{'name': player.playerName, 'team': 'Team B'} for player in players_B if player.playerRole in [2, 3]]
+            batsmen_data = [{'name': player.playerName, 'team': team_A.teamshortform} for player in players_A if player.playerRole in [1, 3, 4]] + [{'name': player.playerName, 'team': team_B.teamshortform} for player in players_B if player.playerRole in [1, 3, 4]]
+            bowlers_data = [{'name': player.playerName, 'team': team_A.teamshortform} for player in players_A if player.playerRole in [2, 3]] + [{'name': player.playerName, 'team': team_B.teamshortform} for player in players_B if player.playerRole in [2, 3]]
 
             match_status = match.status
             winner_team = match.winner_team
@@ -460,12 +320,13 @@ def predict1(request, match_id):
 
 
 
-@csrf_exempt
-def lb_participation(request):
-    if request.method == 'POST':
+@method_decorator(csrf_exempt, name='dispatch')
+class LBParticipationView(View):
+    def post(self, request):
         # Parse the request body to extract form data
         body_unicode = request.body.decode('utf-8')
         body_data = json.loads(body_unicode)
+        print(request)
         print(request.body)
         leaderboardname = body_data.get('leaderboardname')
         password = body_data.get('password')
@@ -486,8 +347,25 @@ def lb_participation(request):
         except UserInfo.DoesNotExist:
             return JsonResponse({'error': 'User does not exist'}, status=400)
     
-    # Handle other cases or return an error response
-    return JsonResponse({'error': 'Invalid request'}, status=400)
+    def get(self, request):
+        # Handle GET request if needed
+        return JsonResponse({'error': 'GET method not allowed'}, status=405)
+    
+import string
+import random
+
+def suggest_password(request):
+    # Define the character set for the password
+    password_characters = string.ascii_letters + string.digits + "!@#$"
+
+    # Generate a random 10-character password
+    password = ''.join(random.choice(password_characters) for _ in range(10))
+
+    # Return the generated password as a JSON response
+    return JsonResponse({'password': password})
+
+def control_panel(request):
+    return render(request, 'ipl2/controlpanel.html')
 
 def update_match2(request, match_id):
     match_info = MatchInfo.objects.get(pk=match_id)
@@ -498,8 +376,8 @@ def update_match2(request, match_id):
 
         #score_update1(request,match_id)
         #score_update2(request,match_id)
-        #revert_score_updates(match_id)
-        score_update2(request,match_id)
+        revert_score_updates(match_id)
+        #score_update2(request,match_id)
 
         messages.success(request, "Match details updated successfully!")
         return redirect('home')
@@ -513,9 +391,9 @@ def score_update2(request, match_id):
 
     # If the match exists, proceed with scoring
     if match:
-        # Determine the points awarded for correct predictions
+        # DetermŚine the points awarded for correct predictions
         correct_winner_points = 2
-        correct_predictions_points = 5
+        correct_predictions_points = 3
 
         # Check if it's time to reset score2
         # if match_id % 3 == 0:
@@ -523,7 +401,7 @@ def score_update2(request, match_id):
 
         # Define base points and multipliers
         base_correct_winner_points = 2
-        base_correct_predictions_points = 5
+        base_correct_predictions_points = 3
         multipliers = [1, 2, 3, 4, 5, 6, 7, 8]
 
         # Calculate the set number from the match ID
@@ -577,3 +455,92 @@ def score_update2(request, match_id):
 
                 # Save the submission
                 submission.save()
+
+def revert_score_updates(match_id):
+    # Fetch the match information
+    match = MatchInfo.objects.filter(matchID=match_id).first()
+
+    if match:
+        # Fetch submissions for the specified match and correct predicted team
+        submissions = SubmissionsInfo5.objects.filter(smatch_id=match_id, predictedteam=match.winner_team)
+
+        # Iterate over submissions to revert changes
+        for submission in submissions:
+            # Fetch the user information
+            user_info = submission.user
+
+            # Revert score1 and score2 to previous values
+            user_info.score1 -= submission.score
+            user_info.score2 -= submission.score
+
+            # Save the user information
+            user_info.save()
+
+            # Revert the submission score to 0
+            submission.score = 0
+            submission.save()
+
+from .forms import LbRegistrationForm
+
+@login_required()
+def lb_registration(request):
+    if not request.user.is_superuser:
+        messages.error(request, "Only superusers can create leaderboards.")
+        return redirect('home')
+    
+    if request.method == "POST":
+        form = LbRegistrationForm(request.POST)
+        if form.is_valid():
+            lb_info = form.save(commit=False)
+            # Perform any additional processing or validation here
+            lb_info.save()
+
+            messages.success(request, "Leaderboard registered successfully!")
+            return redirect('home')  # Redirect to the home page after successful registration
+        else:
+            messages.error(request, "Invalid form details. Please check and try again.")
+            return redirect('home')  # Redirect to the home page with an error message
+
+    else:
+        form = LbRegistrationForm()
+
+    return render(request, 'ipl2/lb_registration.html', {'form': form})
+
+
+def activate(request, uidb64, token):  
+    User = get_user_model()  
+    try:  
+        uid = force_str(urlsafe_base64_decode(uidb64))  
+        user = User.objects.get(pk=uid)  
+    except(TypeError, ValueError, OverflowError, User.DoesNotExist):  
+        user = None  
+    if user is not None and account_activation_token.check_token(user, token):  
+        user.is_active = True  
+        user.save()  
+        return HttpResponse('Thank you for your email confirmation. Now you can login your account.')  
+    else:  
+        return HttpResponse('Activation link is invalid!')
+
+class CustomPasswordResetView(PasswordResetView):
+    form_class = CustomPasswordResetForm  
+    template_name = 'ipl2/password_reset_form.html'  # Specify your template name
+    success_url = reverse_lazy('password_reset_done')
+
+    def form_valid(self, form):
+        # Check if the entered username and email match a user in the database
+        username = form.cleaned_data['username']
+        email = form.cleaned_data['email']
+
+        try:
+            user = User.objects.get(username=username, email=email)
+        except User.DoesNotExist:
+            messages.error(self.request, 'Invalid username or email.')
+            return HttpResponseRedirect(self.get_success_url())
+
+        # If the user is found, proceed with sending the password reset email
+        form.save(request=self.request)
+
+        # Add your custom logic here if needed
+
+        return super().form_valid(form)
+    
