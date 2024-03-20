@@ -19,6 +19,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from datetime import datetime
 from django.utils import timezone
+from pytz import timezone as pytz_timezone
 
 from django.contrib.auth import views as auth_views
 from django import forms
@@ -48,7 +49,6 @@ def home(request):
     # Serialize the queryset
     serializer = MatchInfoSerializer(matches, many=True)
     
-    # total_users = UserInfo.objects.aggregate(total_users=Count('userID'))['total_users']
     total_users = UserInfo.objects.count()
     # Return the serialized data as JSON response
     return Response({'matches': serializer.data, 'total_users': total_users})
@@ -59,14 +59,11 @@ class RegisterUserView(View):
         try:
             # Parse JSON data from request body
             data = json.loads(request.body)
-            print(data)
             # Create a RegisterUserForm instance with the received data
             form = RegisterUserForm(data)
-            print(form)
             if form.is_valid():
                 # Save the form data to create a new user
                 user = form.save()
-                print(user)
                 # Access UserInfo related to the user
                 user_info = user.userinfo
 
@@ -79,13 +76,11 @@ class RegisterUserView(View):
 
                 # Return success message and user data as JSON response
                 user_data = model_to_dict(user)
-                print(user_data)
+
                 return JsonResponse({'success': True, 'message': 'User registered successfully', 'user': user_data}, status=201)  # Status 201 indicates resource creation
             else:
                 # If form is not valid, return validation errors as JSON response
-                errors = {field: form.errors[field][0] for field in form.errors}
-                print(errors)
-                return JsonResponse( {'error':errors}, status=400)
+                return JsonResponse({'error': 'Username or Email is already in use!'}, status=400)
         except json.JSONDecodeError:
             return JsonResponse({'success': False, 'error': 'Invalid JSON data'}, status=400)
         except LbRegistrationTable.DoesNotExist:
@@ -143,14 +138,19 @@ class UserSubmissions(APIView):
 
 class MatchInfoList(APIView):
     def get(self, request):
-        # Retrieve all matches with status 0 (upcoming matches) and order them by match date
-        match_list = MatchInfo.objects.order_by('matchID', 'matchdate')
-
-        # Serialize the queryset
-        serializer = MatchInfoSerializer(match_list, many=True)
-
+        # Retrieve past matches (status=1) and order them by match date
+        past_matches = MatchInfo.objects.filter(status=1).order_by('-matchdate')[:5]
+        
+        # Serialize past matches
+        past_matches_serializer = MatchInfoSerializer(past_matches, many=True)
+        # Retrieve upcoming matches (status=0) and order them by match date
+        upcoming_matches = MatchInfo.objects.filter(status=0).order_by('matchdate')[:9]
+        
+        # Serialize upcoming matches
+        upcoming_matches_serializer = MatchInfoSerializer(upcoming_matches, many=True)
         # Return the serialized data as JSON response
-        return Response({'match_list': serializer.data})
+
+        return Response({'past_matches': past_matches_serializer.data, 'upcoming_matches': upcoming_matches_serializer.data})
 
 def leaderboard2(request):
     leaderboards = LbRegistrationTable.objects.all()
@@ -204,7 +204,7 @@ def leaderboard2(request):
     # Return the serialized data as a JSON response
     return JsonResponse(serialized_data)
 
-from django.utils import timezone
+IST = pytz_timezone('Asia/Kolkata') 
 
 @csrf_exempt
 def predict1(request, match_id):
@@ -212,7 +212,19 @@ def predict1(request, match_id):
         match = MatchInfo.objects.filter(matchID=match_id).first()
         if not match:
             return JsonResponse({'error': 'Match does not exist'}, status=400)
-        if match:
+        
+        else:
+            current_time_ist = timezone.now().astimezone(IST)
+        
+            match_datetime_ist = timezone.make_aware(
+                timezone.datetime.combine(match.matchdate, match.matchtime),
+                timezone=IST
+            )
+
+            if current_time_ist >= match_datetime_ist:
+                print("Time UP")
+                return JsonResponse({'error': 'Prediction closed. Match has already started.'}, status=400)
+        
             team_A = match.teamA
             team_B = match.teamB
 
@@ -319,15 +331,12 @@ def predict1(request, match_id):
         return JsonResponse({'error': 'Match does not exist'}, status=400)
 
 
-
 @method_decorator(csrf_exempt, name='dispatch')
 class LBParticipationView(View):
     def post(self, request):
         # Parse the request body to extract form data
         body_unicode = request.body.decode('utf-8')
         body_data = json.loads(body_unicode)
-        print(request)
-        print(request.body)
         leaderboardname = body_data.get('leaderboardname')
         password = body_data.get('password')
         username = body_data.get('username')  # Add username to form data
@@ -337,20 +346,21 @@ class LBParticipationView(View):
             if password == leaderboard_obj.password:
                 # Fetch the logged-in user's username
                 user = UserInfo.objects.get(username=username)
-                lb_participation = LbParticipationTable.objects.create(lid=leaderboard_obj, username=user)
-                messages.success(request, 'Successfully participated in the leaderboard.')
-                return JsonResponse({'success': True})  # Respond with success
+                # Check if the user already exists in the leaderboard
+                if LbParticipationTable.objects.filter(lid=leaderboard_obj, username=user).exists():
+                    return JsonResponse({'error': 'User already exists in the leaderboard'}, status=400)
+                else:
+                    # If user doesn't exist, create new entry in LbParticipationTable
+                    lb_participation = LbParticipationTable.objects.create(lid=leaderboard_obj, username=user)
+                    messages.success(request, 'Successfully participated in the leaderboard.')
+                    return JsonResponse({'success': True})  # Respond with success
             else:
                 return JsonResponse({'error': 'Incorrect password'}, status=400)
         except LbRegistrationTable.DoesNotExist:
             return JsonResponse({'error': 'Leaderboard does not exist'}, status=400)
         except UserInfo.DoesNotExist:
             return JsonResponse({'error': 'User does not exist'}, status=400)
-    
-    def get(self, request):
-        # Handle GET request if needed
-        return JsonResponse({'error': 'GET method not allowed'}, status=405)
-    
+
 import string
 import random
 
@@ -375,8 +385,8 @@ def update_match2(request, match_id):
         form.save()
 
         #score_update1(request,match_id)
-        #score_update2(request,match_id)
-        revert_score_updates(match_id)
+        score_update2(request,match_id)
+        #revert_score_updates(match_id)
         #score_update2(request,match_id)
 
         messages.success(request, "Match details updated successfully!")
@@ -392,27 +402,21 @@ def score_update2(request, match_id):
     # If the match exists, proceed with scoring
     if match:
         # DetermŚine the points awarded for correct predictions
-        correct_winner_points = 2
-        correct_predictions_points = 3
-
-        # Check if it's time to reset score2
-        # if match_id % 3 == 0:
-        #     reset_weekly(request)  # Call the reset_weekly function
+        correct_winner_points = 1
+        correct_predictions_points = 1
 
         # Define base points and multipliers
-        base_correct_winner_points = 2
-        base_correct_predictions_points = 3
-        multipliers = [1, 2, 3, 4, 5, 6, 7, 8]
-
-        # Calculate the set number from the match ID
-        match_set = match_id % 3
+        base_correct_winner_points = 3
+        base_correct_predictions_points = 2
+        
+        i=1
 
         # Multiply the base points with the multiplier based on the match set
-        correct_winner_points = base_correct_winner_points * multipliers[match_set]
-        correct_predictions_points = base_correct_predictions_points * multipliers[match_set]
+        correct_winner_points = base_correct_winner_points * i
+        correct_predictions_points = base_correct_predictions_points * i
 
         # Fetch submissions for the specified match and correct predicted team
-        submissions = SubmissionsInfo5.objects.filter(smatch_id=match_id, predictedteam=match.winner_team)
+        submissions = SubmissionsInfo5.objects.filter(smatch_id=match_id)
 
         # Update scores for each user who made correct predictions
         for submission in submissions:
@@ -423,10 +427,11 @@ def score_update2(request, match_id):
             user_info = UserInfo.objects.filter(username=un).first()
 
             if user_info:
-                # Update score1 for correct predicted team
-                user_info.score1 += correct_winner_points
-                # Update score2 for correct predicted team
-                user_info.score2 += correct_winner_points
+
+                # Update score1 and score2 for correct predicted team
+                if submission.predictedteam == match.winner_team:
+                    user_info.score1 += correct_winner_points
+                    user_info.score2 += correct_winner_points
 
                 # Update score1 for correct predicted playerofmatch, mostrunsplayer, mostwickettaker
                 if submission.predictedpom == match.playerofmatch:
@@ -442,43 +447,52 @@ def score_update2(request, match_id):
                 # Save the updated user information
                 user_info.save()
 
-                # Update score1 for the submission
-                submission.score += correct_winner_points
-
                 # Add points for correct predicted team
+                if submission.predictedteam == match.winner_team:
+                    submission.score += correct_winner_points
                 if submission.predictedpom == match.playerofmatch:
                     submission.score += correct_predictions_points
                 if submission.predictedmr == match.mostrunsplayer:
                     submission.score += correct_predictions_points
                 if submission.predictedmwk == match.mostwickettaker:
                     submission.score += correct_predictions_points
-
                 # Save the submission
                 submission.save()
 
-def revert_score_updates(match_id):
+    return render(request, 'ipl2/score_update_success.html')
+
+def revert_score_updates(request,match_id):
     # Fetch the match information
     match = MatchInfo.objects.filter(matchID=match_id).first()
 
     if match:
         # Fetch submissions for the specified match and correct predicted team
-        submissions = SubmissionsInfo5.objects.filter(smatch_id=match_id, predictedteam=match.winner_team)
+        submissions = SubmissionsInfo5.objects.filter(smatch_id=match_id)
 
         # Iterate over submissions to revert changes
         for submission in submissions:
             # Fetch the user information
             user_info = submission.user
-
+            # print(submission.score)
             # Revert score1 and score2 to previous values
+            
             user_info.score1 -= submission.score
+            # print(submission.score)
             user_info.score2 -= submission.score
-
+            # print(submission.score)
             # Save the user information
             user_info.save()
 
             # Revert the submission score to 0
             submission.score = 0
             submission.save()
+    return render(request, 'ipl2/revert_changes.html')
+
+def reset_weekly_leaderboard(request):
+    # Reset the score2 field of all users to 0
+    UserInfo.objects.all().update(score2=0)
+
+    return render(request, 'ipl2/reset_weekly_leaderboard.html')
 
 from .forms import LbRegistrationForm
 

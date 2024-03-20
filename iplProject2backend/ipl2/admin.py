@@ -27,7 +27,7 @@ admin.site.register(PlayerInfo, PlayerInfoAdmin)
 
 class SubmissionsInfoAdmin(admin.ModelAdmin):
     list_display = ('submissionID', 'username', 'user', 'smatch', 'updated_time', 'predictedteam', 'predictedpom', 'predictedmr', 'predictedmwk', 'score')
-    list_filter = ('updated_time', 'predictedteam')
+    list_filter = ('predictedteam', 'smatch', 'username')
     search_fields = ('submissionID', 'username')
 
 admin.site.register(SubmissionsInfo5, SubmissionsInfoAdmin)

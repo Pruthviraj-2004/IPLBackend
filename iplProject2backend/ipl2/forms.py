@@ -18,13 +18,9 @@ class RegisterUserForm(UserCreationForm):
         error_messages = {
             'username': {
                 'required': 'This field is required.',
-                'max_length': 'Username must be 150 characters or fewer. Letters, digits and @/./+/-/_ only.',
             },
             'password1': {
-                'too_similar': 'Your password cant be too similar to your other personal information.',
-                'min_length': 'Your password must contain at least 8 characters.',
-                'common_password': 'Your password cant be a commonly used password.',
-                'numeric_password': 'Your password cant be entirely numeric.',
+                'min_length': 'Your password must contain at least 8 characters.',   
             },
         }
 

@@ -21,6 +21,8 @@ urlpatterns = [
     path("lb_registration", views.lb_registration, name="lb_registration"),
     path('suggest_password/', views.suggest_password, name='suggest_password'),
     path('control-panel', views.control_panel, name='control_panel'),
+    path('revert_score_updates/<match_id>', views.revert_score_updates, name='revert_score_updates'),
+    path('reset_weekly_leaderboard', views.reset_weekly_leaderboard, name='reset_weekly_leaderboard'),
 
     # path('activate/(?P<uidb64>[0-9A-Za-z_\-]+)/(?P<token>[0-9A-Za-z]{1,13}-[0-9A-Za-z]{1,20})/',views.activate, name='activate'),
     path('password_reset/', CustomPasswordResetView.as_view(template_name='ipl2/password_reset_form.html'), name='password_reset'),

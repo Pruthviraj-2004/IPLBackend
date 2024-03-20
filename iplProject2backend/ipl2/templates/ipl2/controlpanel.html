@@ -4,12 +4,83 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Control Panel</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+        }
+        h1 {
+            text-align: center;
+            margin-top: 20px;
+        }
+        form {
+            max-width: 400px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        label {
+            display: block;
+            margin-bottom: 10px;
+        }
+        input[type="text"] {
+            width: calc(100% - 22px);
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button[type="submit"] {
+            width: 100%;
+            padding: 10px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button[type="submit"]:hover {
+            background-color: #0056b3;
+        }
+    </style>
 </head>
 <body>
     <h1>Control Panel</h1>
 
-    <button>Update Match Details</button>
-    <button>Revert Scores</button>
-    <button>Reset Weekly Leaderboard</button>
+    <form id="updateMatchForm" method="GET" action="{% url 'update_match2' 1 %}">
+        <label for="matchIdInput">Enter Match ID:</label>
+        <input type="text" id="matchIdInput" name="match_id">
+        <button type="submit">Update Match Details</button>
+    </form>
+
+    <form id="revertScoresForm" method="GET" action="{% url 'revert_score_updates' 1 %}">
+        <label for="matchIdRevertInput">Enter Match ID:</label>
+        <input type="text" id="matchIdRevertInput" name="match_id">
+        <button type="submit">Revert Scores</button>
+    </form>
+
+    <form id="resetWeeklyLeaderboardForm" method="GET" action="{% url 'reset_weekly_leaderboard' %}">
+        <button type="submit">Reset Weekly Leaderboard</button>
+    </form>
+
+    <script>
+        // Function to handle form submission for update match details
+        document.getElementById("updateMatchForm").addEventListener("submit", function(event) {
+            event.preventDefault(); // Prevent default form submission
+            const matchId = document.getElementById("matchIdInput").value;
+            window.location.href = `update_match2/${matchId}`; // Redirect to update_match2 with match_id
+        });
+
+        // Function to handle form submission for reverting scores
+        document.getElementById("revertScoresForm").addEventListener("submit", function(event) {
+            event.preventDefault(); // Prevent default form submission
+            const matchId = document.getElementById("matchIdRevertInput").value;
+            window.location.href = `revert_score_updates/${matchId}`; // Redirect to revert_score_updates with match_id
+        });
+    </script>
 </body>
 </html>
