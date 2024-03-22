@@ -17,7 +17,7 @@ urlpatterns = [
     path('predict1/<int:match_id>/', views.predict1, name='predict1'),
     path('lb_participation/', views.LBParticipationView.as_view(), name='lb_participation'),
     path("update_match2/<match_id>", views.update_match2, name="update_match2"),
-
+path("leaderboard4/<str:username>/", views.leaderboard4, name="leaderboard4"),
 
     path("lb_registration", views.lb_registration, name="lb_registration"),
     path('suggest_password/', views.suggest_password, name='suggest_password'),

@@ -12,7 +12,7 @@ from .forms import  MatchInfoForm, RegisterUserForm
 from django.core.serializers import serialize
 from .models import SubmissionsInfo5, UserInfo, LbParticipationTable, LbRegistrationTable, MatchInfo, TeamInfo, PlayerInfo
 from rest_framework.views import APIView
-from .serializers import MatchInfoSerializer, TeamInfoSerializer, SubmissionsInfo5Serializer
+from .serializers import LbRegistrationTableSerializer, MatchInfoSerializer, TeamInfoSerializer, SubmissionsInfo5Serializer
 from django.db.models import Count
 from django.forms.models import model_to_dict
 from django.utils.decorators import method_decorator
@@ -253,6 +253,81 @@ def leaderboard2(request):
 
     # Return the serialized data as a JSON response
     return JsonResponse(serialized_data)
+
+def sort_user_list(user_list, score_key):
+
+    def get_score(user_info):
+        return -user_info[score_key], user_info['username']
+
+    return sorted(user_list, key=get_score)
+
+def leaderboard4(request, username):
+    leaderboards = LbRegistrationTable.objects.all()
+    user_participating_leaderboards = []
+
+    # Check if the provided username is participating in any leaderboard
+    if username:
+        user_participating_leaderboards = LbParticipationTable.objects.filter(username__username=username).values_list('lid__leaderboardname', flat=True)
+
+    # Filter leaderboards based on user's participation
+    if user_participating_leaderboards:
+        leaderboards = leaderboards.filter(leaderboardname__in=user_participating_leaderboards)
+    else:
+        # Default to displaying only 'Global' and 'Weekly' leaderboards if the user is not participating
+        leaderboards = leaderboards.filter(leaderboardname__in=['Global', 'Weekly'])
+
+    # Get the selected leaderboard ID from the URL parameters
+    selected_leaderboard_id = request.GET.get('selected_leaderboard')
+    # Initialize an empty list for user_list
+    user_list = []
+    # Initialize selected_leaderboard
+    selected_leaderboard = None
+    # Filter users based on the selected leaderboard if a leaderboard is selected
+    if selected_leaderboard_id:
+        try:
+            selected_leaderboard_id = int(selected_leaderboard_id)
+            # Retrieve the usernames of users who have participated in the selected leaderboard
+            usernames = LbParticipationTable.objects.filter(lid_id=selected_leaderboard_id).values_list('username__username', flat=True)
+            # Filter user_list based on the usernames obtained
+            user_list = list(UserInfo.objects.filter(username__in=usernames).values())
+            # Get the selected leaderboard object
+            selected_leaderboard = LbRegistrationTable.objects.get(pk=selected_leaderboard_id)
+            if selected_leaderboard.leaderboardname == 'Weekly':
+                user_list = sort_user_list(user_list, 'score2')
+            else:
+                user_list = sort_user_list(user_list, 'score1')
+        except (ValueError, LbRegistrationTable.DoesNotExist):
+            pass
+    else:
+        # If no leaderboard is selected or if 'Global' is selected by default, display users for 'Global' leaderboard
+        global_leaderboard = leaderboards.filter(leaderboardname='Global').first()
+        if global_leaderboard:
+            usernames = LbParticipationTable.objects.filter(lid_id=global_leaderboard.pk).values_list('username__username', flat=True)
+            user_list = list(UserInfo.objects.filter(username__in=usernames).values())
+            user_list = sort_user_list(user_list, 'score1')
+            selected_leaderboard = global_leaderboard
+
+    # Assign ranks to users in user_list
+    for rank, user_info in enumerate(user_list, start=1):
+        user_info['rank'] = rank
+
+    serializer = LbRegistrationTableSerializer(leaderboards, many=True)
+    serialized_leaderboards = serializer.data
+
+    # Prepare JSON response
+    serialized_data = {
+        'leaderboards': serialized_leaderboards,  # Convert queryset to list of dictionaries
+        'user_list': [{'rank': user_info['rank'], 'username': user_info['username'], 'score1': user_info['score1'], 'score2': user_info['score2']} for user_info in user_list],  # Include only necessary fields
+        'selected_leaderboard': {
+            'lid': selected_leaderboard.lid,  # Use the primary key field here
+            'leaderboardname': selected_leaderboard.leaderboardname,
+            # Add more fields as needed
+        } if selected_leaderboard else None
+    }
+
+    # Return the serialized data as a JSON response
+    return JsonResponse(serialized_data)
+
 
 IST = pytz_timezone('Asia/Kolkata') 
 
