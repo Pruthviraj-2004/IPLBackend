@@ -125,6 +125,56 @@ def logout_user(request):
     messages.success(request, ("Logged Out Successfully!! "))
     return redirect('home')
 
+
+@method_decorator(csrf_exempt, name='dispatch')
+class RegisterUserView1(View):
+    def post(self, request):
+        try:
+            # Parse JSON data from request body
+            data = json.loads(request.body)
+            # Create a RegisterUserForm instance with the received data
+            form = RegisterUserForm(data)
+            if form.is_valid():
+                # Extract email address from the form data
+                email = form.cleaned_data.get('email')
+                # Extract domain from email address
+                domain = email.split('@')[-1]
+
+                # Check if the domain is 'nexthink.com'
+                if domain == 'nexthink.com':
+                    leaderboard_name = 'Nexthink'
+                else:
+                    leaderboard_name = 'Global'
+
+                # Save the form data to create a new user
+                user = form.save()
+                # Access UserInfo related to the user
+                user_info = user.userinfo
+
+                # Create entry in LbParticipationTable for the appropriate leaderboard and the newly registered user
+                leaderboard = LbRegistrationTable.objects.get(leaderboardname=leaderboard_name)
+                LbParticipationTable.objects.create(lid=leaderboard, username=user_info)
+
+                # If not Nexthink, also add to Weekly leaderboard
+                if leaderboard_name != 'Nexthink':
+                    weekly_leaderboard = LbRegistrationTable.objects.get(leaderboardname='Weekly')
+                    LbParticipationTable.objects.create(lid=weekly_leaderboard, username=user_info)
+
+                # Return success message and user data as JSON response
+                user_data = model_to_dict(user)
+
+                return JsonResponse({'success': True, 'message': 'User registered successfully', 'user': user_data}, status=201)  # Status 201 indicates resource creation
+            else:
+                # If form is not valid, return validation errors as JSON response
+                return JsonResponse({'error': 'Username or Email is already in use!'}, status=400)
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'error': 'Invalid JSON data'}, status=400)
+        except LbRegistrationTable.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Leaderboard does not exist'}, status=404)
+
+    def get(self, request):
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
 class UserSubmissions(APIView):
     def get(self, request, username):
         # Fetch all submissions for the specified user

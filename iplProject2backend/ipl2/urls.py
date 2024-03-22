@@ -8,6 +8,7 @@ from .views import CustomPasswordResetView
 urlpatterns = [
     path("home/", views.home, name="home"),
     path("register_user/", views.RegisterUserView.as_view(), name="register_user"),
+    path("register_user1/", views.RegisterUserView1.as_view(), name="register_user1"),
     path("login_user/", views.LoginUserView.as_view(), name="login"),
     path("logout_user/", views.logout_user, name="logout"),
     path("leaderboard2/", views.leaderboard2, name="leaderboard2"),

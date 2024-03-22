@@ -78,7 +78,7 @@ class SubmissionsInfo5Serializer(serializers.ModelSerializer):
 class LbRegistrationTableSerializer(serializers.ModelSerializer):
     class Meta:
         model = LbRegistrationTable
-        fields = '__all__'
+        fields = ['lid', 'leaderboardname']
 
 class LbParticipationTableSerializer(serializers.ModelSerializer):
     class Meta:
