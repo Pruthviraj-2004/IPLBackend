@@ -28,6 +28,11 @@ class MatchInfoSerializer(serializers.ModelSerializer):
         model = MatchInfo
         fields = ['matchID', 'matchdate', 'matchtime', 'teamA', 'teamB', 'winner_team', 'status', 'playerofmatch', 'mostrunsplayer', 'mostwickettaker', 'location']
 
+class SimpleMatchInfoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MatchInfo
+        fields = ['matchID', 'matchdate', 'matchtime', 'teamA', 'teamB', 'status', 'location']
+
 class SubmissionsInfo5Serializer(serializers.ModelSerializer):
     predictedteam = serializers.SerializerMethodField()
     predictedpom = serializers.SerializerMethodField()

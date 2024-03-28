@@ -12,7 +12,7 @@ from .forms import  MatchInfoForm, RegisterUserForm
 from django.core.serializers import serialize
 from .models import SubmissionsInfo5, UserInfo, LbParticipationTable, LbRegistrationTable, MatchInfo, TeamInfo, PlayerInfo
 from rest_framework.views import APIView
-from .serializers import LbRegistrationTableSerializer, MatchInfoSerializer, TeamInfoSerializer, SubmissionsInfo5Serializer
+from .serializers import LbRegistrationTableSerializer, MatchInfoSerializer, SimpleMatchInfoSerializer, TeamInfoSerializer, SubmissionsInfo5Serializer
 from django.db.models import Count
 from django.forms.models import model_to_dict
 from django.utils.decorators import method_decorator
@@ -40,6 +40,9 @@ from django.core.mail import EmailMessage
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse
 
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import TokenAuthentication
 
 @api_view(['GET'])
 def home(request):
@@ -48,10 +51,25 @@ def home(request):
     
     # Serialize the queryset
     serializer = MatchInfoSerializer(matches, many=True)
+    # serializer = SimpleMatchInfoSerializer(matches, many=True)
     
     total_users = UserInfo.objects.count()
     # Return the serialized data as JSON response
     return Response({'matches': serializer.data, 'total_users': total_users})
+
+# @api_view(['GET'])
+# @authentication_classes([TokenAuthentication])  # Add TokenAuthentication
+# @permission_classes([IsAuthenticated])
+# def home(request):
+#     # Retrieve all MatchInfo objects
+#     matches = MatchInfo.objects.all()
+    
+#     # Serialize the queryset
+#     serializer = MatchInfoSerializer(matches, many=True)
+    
+#     total_users = UserInfo.objects.count()
+#     # Return the serialized data as JSON response
+#     return Response({'matches': serializer.data, 'total_users': total_users})
     
 @method_decorator(csrf_exempt, name='dispatch')
 class RegisterUserView(View):
@@ -126,6 +144,55 @@ def logout_user(request):
     return redirect('home')
 
 
+# @method_decorator(csrf_exempt, name='dispatch')
+# class RegisterUserView1(View):
+#     def post(self, request):
+#         try:
+#             # Parse JSON data from request body
+#             data = json.loads(request.body)
+#             # Create a RegisterUserForm instance with the received data
+#             form = RegisterUserForm(data)
+#             if form.is_valid():
+#                 # Extract email address from the form data
+#                 email = form.cleaned_data.get('email')
+#                 # Extract domain from email address
+#                 domain = email.split('@')[-1]
+
+#                 # Check if the domain is 'nexthink.com'
+#                 if domain == 'nexthink.com':
+#                     leaderboard_name = 'Nexthink'
+#                 else:
+#                     leaderboard_name = 'Global'
+
+#                 # Save the form data to create a new user
+#                 user = form.save()
+#                 # Access UserInfo related to the user
+#                 user_info = user.userinfo
+
+#                 # Create entry in LbParticipationTable for the appropriate leaderboard and the newly registered user
+#                 leaderboard = LbRegistrationTable.objects.get(leaderboardname=leaderboard_name)
+#                 LbParticipationTable.objects.create(lid=leaderboard, username=user_info)
+
+#                 # If not Nexthink, also add to Weekly leaderboard
+#                 if leaderboard_name != 'Nexthink':
+#                     weekly_leaderboard = LbRegistrationTable.objects.get(leaderboardname='Weekly')
+#                     LbParticipationTable.objects.create(lid=weekly_leaderboard, username=user_info)
+
+#                 # Return success message and user data as JSON response
+#                 user_data = model_to_dict(user)
+
+#                 return JsonResponse({'success': True, 'message': 'User registered successfully', 'user': user_data}, status=201)  # Status 201 indicates resource creation
+#             else:
+#                 # If form is not valid, return validation errors as JSON response
+#                 return JsonResponse({'error': 'Username or Email is already in use!'}, status=400)
+#         except json.JSONDecodeError:
+#             return JsonResponse({'success': False, 'error': 'Invalid JSON data'}, status=400)
+#         except LbRegistrationTable.DoesNotExist:
+#             return JsonResponse({'success': False, 'error': 'Leaderboard does not exist'}, status=404)
+
+#     def get(self, request):
+#         return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
 @method_decorator(csrf_exempt, name='dispatch')
 class RegisterUserView1(View):
     def post(self, request):
@@ -143,8 +210,11 @@ class RegisterUserView1(View):
                 # Check if the domain is 'nexthink.com'
                 if domain == 'nexthink.com':
                     leaderboard_name = 'Nexthink'
+                    # Also add the user to Nexthink Weekly leaderboard
+                    weekly_leaderboard_name = 'Nexthink Weekly'
                 else:
                     leaderboard_name = 'Global'
+                    weekly_leaderboard_name = 'Weekly'
 
                 # Save the form data to create a new user
                 user = form.save()
@@ -155,10 +225,9 @@ class RegisterUserView1(View):
                 leaderboard = LbRegistrationTable.objects.get(leaderboardname=leaderboard_name)
                 LbParticipationTable.objects.create(lid=leaderboard, username=user_info)
 
-                # If not Nexthink, also add to Weekly leaderboard
-                if leaderboard_name != 'Nexthink':
-                    weekly_leaderboard = LbRegistrationTable.objects.get(leaderboardname='Weekly')
-                    LbParticipationTable.objects.create(lid=weekly_leaderboard, username=user_info)
+                # Add user to the weekly leaderboard if it's not the Nexthink user
+                weekly_leaderboard = LbRegistrationTable.objects.get(leaderboardname=weekly_leaderboard_name)
+                LbParticipationTable.objects.create(lid=weekly_leaderboard, username=user_info)
 
                 # Return success message and user data as JSON response
                 user_data = model_to_dict(user)
@@ -172,9 +241,6 @@ class RegisterUserView1(View):
         except LbRegistrationTable.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Leaderboard does not exist'}, status=404)
 
-    def get(self, request):
-        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
-
 class UserSubmissions(APIView):
     def get(self, request, username):
         # Fetch all submissions for the specified user
@@ -186,7 +252,12 @@ class UserSubmissions(APIView):
         # Return the serialized data as a JSON response
         return JsonResponse({'username': username, 'submissions': serialized_data})
 
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import TokenAuthentication
+
 class MatchInfoList(APIView):
+    # permission_classes = [IsAuthenticated]
+    # authentication_classes = [TokenAuthentication]
     def get(self, request):
         # Retrieve past matches (status=1) and order them by match date
         past_matches = MatchInfo.objects.filter(status=1).order_by('-matchdate')[:5]
@@ -261,84 +332,7 @@ def sort_user_list(user_list, score_key):
 
     return sorted(user_list, key=get_score)
 
-# def leaderboard4(request, username):
-#     leaderboards = LbRegistrationTable.objects.all()
-#     user_participating_leaderboards = []
-
-#     # Check if the provided username is participating in any leaderboard
-#     if username:
-#         user_participating_leaderboards = LbParticipationTable.objects.filter(username__username=username).values_list('lid__leaderboardname', flat=True)
-
-#     # Filter leaderboards based on user's participation
-#     if user_participating_leaderboards:
-#         leaderboards = leaderboards.filter(leaderboardname__in=user_participating_leaderboards)
-#     else:
-#         # Default to displaying only 'Global' and 'Weekly' leaderboards if the user is not participating
-#         leaderboards = leaderboards.filter(leaderboardname__in=['Global', 'Weekly'])
-
-#     # Get the selected leaderboard ID from the URL parameters
-#     selected_leaderboard_id = request.GET.get('selected_leaderboard')
-#     # Initialize an empty list for user_list
-#     user_list = []
-#     # Initialize selected_leaderboard
-#     selected_leaderboard = None
-#     # Filter users based on the selected leaderboard if a leaderboard is selected
-#     if selected_leaderboard_id:
-#         try:
-#             selected_leaderboard_id = int(selected_leaderboard_id)
-#             # Retrieve the usernames of users who have participated in the selected leaderboard
-#             usernames = LbParticipationTable.objects.filter(lid_id=selected_leaderboard_id).values_list('username__username', flat=True)
-#             # Filter user_list based on the usernames obtained
-#             user_list = list(UserInfo.objects.filter(username__in=usernames).values())
-#             # Get the selected leaderboard object
-#             selected_leaderboard = LbRegistrationTable.objects.get(pk=selected_leaderboard_id)
-#             if selected_leaderboard.leaderboardname == 'Weekly':
-#                 user_list = sort_user_list(user_list, 'score2')
-#             else:
-#                 user_list = sort_user_list(user_list, 'score1')
-#         except (ValueError, LbRegistrationTable.DoesNotExist):
-#             pass
-#     else:
-#         # If no leaderboard is selected or if 'Global' is selected by default, display users for 'Global' leaderboard
-#         global_leaderboard = leaderboards.filter(leaderboardname='Global').first()
-#         if global_leaderboard:
-#             usernames = LbParticipationTable.objects.filter(lid_id=global_leaderboard.pk).values_list('username__username', flat=True)
-#             user_list = list(UserInfo.objects.filter(username__in=usernames).values())
-#             user_list = sort_user_list(user_list, 'score1')
-#             selected_leaderboard = global_leaderboard
-
-#     # Assign ranks to users in user_list
-#     for rank, user_info in enumerate(user_list, start=1):
-#         user_info['rank'] = rank
-
-#     serializer = LbRegistrationTableSerializer(leaderboards, many=True)
-#     serialized_leaderboards = serializer.data
-
-#     # Prepare JSON response
-#     serialized_data = {
-#         'leaderboards': serialized_leaderboards,  # Convert queryset to list of dictionaries
-#         'user_list': [{'rank': user_info['rank'], 'username': user_info['username'], 'score1': user_info['score1'], 'score2': user_info['score2']} for user_info in user_list],  # Include only necessary fields
-#         'selected_leaderboard': {
-#             'lid': selected_leaderboard.lid,  # Use the primary key field here
-#             'leaderboardname': selected_leaderboard.leaderboardname,
-#             # Add more fields as needed
-#         } if selected_leaderboard else None
-#     }
-
-#     # Return the serialized data as a JSON response
-#     return JsonResponse(serialized_data)
-
 def leaderboard4(request, username):
-    # Check if the user is in the Nexthink leaderboard
-    is_nexthink_participant = LbParticipationTable.objects.filter(username__username=username, lid__leaderboardname='Nexthink').exists()
-    # Check if the user is in the Global leaderboard
-    is_global_participant = LbParticipationTable.objects.filter(username__username=username, lid__leaderboardname='Global').exists()
-
-    if is_nexthink_participant and not is_global_participant:
-        default_leaderboard_name = 'Nexthink'
-    else:
-        default_leaderboard_name = 'Global'
-
     leaderboards = LbRegistrationTable.objects.all()
     user_participating_leaderboards = []
 
@@ -355,12 +349,6 @@ def leaderboard4(request, username):
 
     # Get the selected leaderboard ID from the URL parameters
     selected_leaderboard_id = request.GET.get('selected_leaderboard')
-
-    # If no leaderboard is selected or if the user is not in the Global leaderboard, set the default leaderboard
-    if not selected_leaderboard_id or default_leaderboard_name == 'Nexthink':
-        default_leaderboard = leaderboards.filter(leaderboardname=default_leaderboard_name).first()
-        selected_leaderboard_id = default_leaderboard.pk if default_leaderboard else None
-
     # Initialize an empty list for user_list
     user_list = []
     # Initialize selected_leaderboard
@@ -374,13 +362,21 @@ def leaderboard4(request, username):
             # Filter user_list based on the usernames obtained
             user_list = list(UserInfo.objects.filter(username__in=usernames).values())
             # Get the selected leaderboard object
-            selected_leaderboard = leaderboards.get(pk=selected_leaderboard_id)
+            selected_leaderboard = LbRegistrationTable.objects.get(pk=selected_leaderboard_id)
             if selected_leaderboard.leaderboardname == 'Weekly':
                 user_list = sort_user_list(user_list, 'score2')
             else:
                 user_list = sort_user_list(user_list, 'score1')
         except (ValueError, LbRegistrationTable.DoesNotExist):
             pass
+    else:
+        # If no leaderboard is selected or if 'Global' is selected by default, display users for 'Global' leaderboard
+        global_leaderboard = leaderboards.filter(leaderboardname='Global').first()
+        if global_leaderboard:
+            usernames = LbParticipationTable.objects.filter(lid_id=global_leaderboard.pk).values_list('username__username', flat=True)
+            user_list = list(UserInfo.objects.filter(username__in=usernames).values())
+            user_list = sort_user_list(user_list, 'score1')
+            selected_leaderboard = global_leaderboard
 
     # Assign ranks to users in user_list
     for rank, user_info in enumerate(user_list, start=1):
@@ -394,16 +390,172 @@ def leaderboard4(request, username):
         'leaderboards': serialized_leaderboards,  # Convert queryset to list of dictionaries
         'user_list': [{'rank': user_info['rank'], 'username': user_info['username'], 'score1': user_info['score1'], 'score2': user_info['score2']} for user_info in user_list],  # Include only necessary fields
         'selected_leaderboard': {
-            'lid': selected_leaderboard.pk if selected_leaderboard else None,  # Use the primary key field here
-            'leaderboardname': selected_leaderboard.leaderboardname if selected_leaderboard else None,
+            'lid': selected_leaderboard.lid,  # Use the primary key field here
+            'leaderboardname': selected_leaderboard.leaderboardname,
             # Add more fields as needed
-        }
+        } if selected_leaderboard else None
     }
 
     # Return the serialized data as a JSON response
     return JsonResponse(serialized_data)
 
+# def leaderboard4(request, username):
+#     # Check if the user is in the Nexthink leaderboard
+#     is_nexthink_participant = LbParticipationTable.objects.filter(username__username=username, lid__leaderboardname='Nexthink').exists()
+#     # Check if the user is in the Global leaderboard
+#     is_global_participant = LbParticipationTable.objects.filter(username__username=username, lid__leaderboardname='Global').exists()
 
+#     if is_nexthink_participant and not is_global_participant:
+#         default_leaderboard_name = 'Nexthink'
+#     else:
+#         default_leaderboard_name = 'Global'
+
+#     leaderboards = LbRegistrationTable.objects.all()
+#     user_participating_leaderboards = []
+
+#     # Check if the provided username is participating in any leaderboard
+#     if username:
+#         user_participating_leaderboards = LbParticipationTable.objects.filter(username__username=username).values_list('lid__leaderboardname', flat=True)
+
+#     # Filter leaderboards based on user's participation
+#     if user_participating_leaderboards:
+#         leaderboards = leaderboards.filter(leaderboardname__in=user_participating_leaderboards)
+#     else:
+#         # Default to displaying only 'Global' and 'Weekly' leaderboards if the user is not participating
+#         leaderboards = leaderboards.filter(leaderboardname__in=['Global', 'Weekly'])
+
+#     # Get the selected leaderboard ID from the URL parameters
+#     selected_leaderboard_id = request.GET.get('selected_leaderboard')
+
+#     # If no leaderboard is selected or if the user is not in the Global leaderboard, set the default leaderboard
+#     if not selected_leaderboard_id or default_leaderboard_name == 'Nexthink':
+#         default_leaderboard = leaderboards.filter(leaderboardname=default_leaderboard_name).first()
+#         selected_leaderboard_id = default_leaderboard.pk if default_leaderboard else None
+
+#     # Initialize an empty list for user_list
+#     user_list = []
+#     # Initialize selected_leaderboard
+#     selected_leaderboard = None
+#     # Filter users based on the selected leaderboard if a leaderboard is selected
+#     if selected_leaderboard_id:
+#         try:
+#             selected_leaderboard_id = int(selected_leaderboard_id)
+#             # Retrieve the usernames of users who have participated in the selected leaderboard
+#             usernames = LbParticipationTable.objects.filter(lid_id=selected_leaderboard_id).values_list('username__username', flat=True)
+#             # Filter user_list based on the usernames obtained
+#             user_list = list(UserInfo.objects.filter(username__in=usernames).values())
+#             # Get the selected leaderboard object
+#             selected_leaderboard = leaderboards.get(pk=selected_leaderboard_id)
+#             if selected_leaderboard.leaderboardname == 'Weekly':
+#                 user_list = sort_user_list(user_list, 'score2')
+#             else:
+#                 user_list = sort_user_list(user_list, 'score1')
+#         except (ValueError, LbRegistrationTable.DoesNotExist):
+#             pass
+
+#     # Assign ranks to users in user_list
+#     for rank, user_info in enumerate(user_list, start=1):
+#         user_info['rank'] = rank
+
+#     serializer = LbRegistrationTableSerializer(leaderboards, many=True)
+#     serialized_leaderboards = serializer.data
+
+#     # Prepare JSON response
+#     serialized_data = {
+#         'leaderboards': serialized_leaderboards,  # Convert queryset to list of dictionaries
+#         'user_list': [{'rank': user_info['rank'], 'username': user_info['username'], 'score1': user_info['score1'], 'score2': user_info['score2']} for user_info in user_list],  # Include only necessary fields
+#         'selected_leaderboard': {
+#             'lid': selected_leaderboard.pk if selected_leaderboard else None,  # Use the primary key field here
+#             'leaderboardname': selected_leaderboard.leaderboardname if selected_leaderboard else None,
+#             # Add more fields as needed
+#         }
+#     }
+
+#     # Return the serialized data as a JSON response
+#     return JsonResponse(serialized_data)
+
+# def leaderboard4(request, username):
+#     # Check if the user is in the Nexthink leaderboard
+#     is_nexthink_participant = LbParticipationTable.objects.filter(username__username=username, lid__leaderboardname='Nexthink').exists()
+#     # Check if the user is in the Global leaderboard
+#     is_global_participant = LbParticipationTable.objects.filter(username__username=username, lid__leaderboardname='Global').exists()
+
+#     if is_nexthink_participant or not is_global_participant:
+#         default_leaderboard_name = 'Nexthink'
+#     else:
+#         default_leaderboard_name = 'Global'
+
+#     leaderboards = LbRegistrationTable.objects.all()
+#     user_participating_leaderboards = []
+
+#     # Check if the provided username is participating in any leaderboard
+#     if username:
+#         user_participating_leaderboards = LbParticipationTable.objects.filter(username__username=username).values_list('lid__leaderboardname', flat=True)
+
+#     # Filter leaderboards based on user's participation
+#     if user_participating_leaderboards:
+#         leaderboards = leaderboards.filter(leaderboardname__in=user_participating_leaderboards)
+#     else:
+#         # Default to displaying only 'Global' and 'Weekly' leaderboards if the user is not participating
+#         leaderboards = leaderboards.filter(leaderboardname__in=['Global', 'Weekly'])
+
+#     # Get the selected leaderboard ID from the URL parameters
+#     selected_leaderboard_id = request.GET.get('selected_leaderboard')
+#     # print(selected_leaderboard_id)
+
+#     # If no leaderboard is selected or if the user is not in the Global leaderboard, set the default leaderboard
+#     if not selected_leaderboard_id and default_leaderboard_name == 'Nexthink':
+
+#         try:
+#             default_leaderboard = leaderboards.get(leaderboardname=default_leaderboard_name)
+#             selected_leaderboard_id = default_leaderboard.pk
+#             # print(selected_leaderboard_id)
+#         except LbRegistrationTable.DoesNotExist:
+#             selected_leaderboard_id = None
+
+#     # Initialize an empty list for user_list
+#     user_list = []
+#     # Initialize selected_leaderboard
+#     selected_leaderboard = None
+#     # Filter users based on the selected leaderboard if a leaderboard is selected
+#     if selected_leaderboard_id:
+#         try:
+#             selected_leaderboard_id = int(selected_leaderboard_id)
+#             # print(selected_leaderboard_id)
+#             # Retrieve the usernames of users who have participated in the selected leaderboard
+#             usernames = LbParticipationTable.objects.filter(lid_id=selected_leaderboard_id).values_list('username__username', flat=True)
+#             # Fetch all users participating in the selected leaderboard
+#             user_list = list(UserInfo.objects.filter(username__in=usernames).values())
+#             # Get the selected leaderboard object
+#             selected_leaderboard = leaderboards.get(pk=selected_leaderboard_id)
+#             if selected_leaderboard.leaderboardname == 'Weekly' or selected_leaderboard.leaderboardname == 'Nexthink Weekly':
+#                 user_list = sort_user_list(user_list, 'score2')
+#             else:
+#                 user_list = sort_user_list(user_list, 'score1')
+#         except (ValueError, LbRegistrationTable.DoesNotExist):
+#             pass
+
+#     # Assign ranks to users in user_list
+#     for rank, user_info in enumerate(user_list, start=1):
+#         user_info['rank'] = rank
+
+#     serializer = LbRegistrationTableSerializer(leaderboards, many=True)
+#     serialized_leaderboards = serializer.data
+
+#     # Prepare JSON response
+#     serialized_data = {
+#         'leaderboards': serialized_leaderboards,  # Convert queryset to list of dictionaries
+#         'user_list': [{'rank': user_info['rank'], 'username': user_info['username'], 'score1': user_info['score1'], 'score2': user_info['score2']} for user_info in user_list],  # Include only necessary fields
+#         'selected_leaderboard': {
+#             'lid': selected_leaderboard.pk if selected_leaderboard else None,  # Use the primary key field here
+#             'leaderboardname': selected_leaderboard.leaderboardname if selected_leaderboard else None,
+#             # Add more fields as needed
+#         }
+#     }
+#     # print(serialized_data)
+
+#     # Return the serialized data as a JSON response
+#     return JsonResponse(serialized_data)
 
 IST = pytz_timezone('Asia/Kolkata') 
 

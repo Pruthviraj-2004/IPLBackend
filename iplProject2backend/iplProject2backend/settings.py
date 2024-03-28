@@ -15,7 +15,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-
+# ADMIN_ENABLED = True 
 # Application definition
 
 INSTALLED_APPS = [
@@ -90,7 +90,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
         "OPTIONS": {
-            "min_length": 8,
+            "min_length": 6,
         },
     },
 ]
@@ -118,7 +118,8 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS_ALLOW_ALL_ORIGINS = True
+# CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOWED_ORGINIS = [
     'http://localhost:3000',
@@ -127,9 +128,13 @@ CORS_ALLOWED_ORGINIS = [
 
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES':('rest_framework.renderers.JSONRenderer',),
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ]
+    # 'DEFAULT_PERMISSION_CLASSES': [
+    #     'rest_framework.permissions.IsAuthenticated',
+    # ],
+    # 'DEFAULT_AUTHENTICATION_CLASSES': [
+    #     'rest_framework.authentication.TokenAuthentication',
+    #     # Other authentication classes if needed
+    # ],
 }
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
