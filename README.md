@@ -4,7 +4,7 @@
 
 ## Introduction
 
-This project is a backend system built with Django, a high-level Python web framework. It handles various functionalities related to user management, match information, and leaderboard data for a predictive play application.
+This project is a backend system built with Django, a high-level Python web framework, to manage user predictions, match information, and leaderboard data for an IPL (Indian Premier League) prediction application.
 
 ## Key Features
 
@@ -16,7 +16,7 @@ This project is a backend system built with Django, a high-level Python web fram
 
 1. **Clone the Repository**:
     ```bash
-    git clone https://github.com/yourusername/yourrepository.git
+    git clone https://github.com/Pruthviraj-2004/IPLBackend.git
     cd yourrepository
     ```
 
